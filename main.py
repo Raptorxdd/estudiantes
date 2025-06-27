@@ -1,18 +1,23 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-import mysql.connector
+import sqlite3
+import os  # <-- Asegúrate de importar os
+
+# --- INICIALIZACIÓN DE LA BASE DE DATOS ---
+if not os.path.exists('datos_bd.db'):
+    with open('datos_bd_sqlite.sql', 'r', encoding='utf-8') as f:
+        sql_script = f.read()
+    conn = sqlite3.connect('datos_bd.db')
+    conn.executescript(sql_script)
+    conn.close()
+# --- FIN DE LA INICIALIZACIÓN DE LA BASE DE DATOS ---
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta'
 
 def get_db():
-    import mysql.connector
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="",
-        database="datos_bd",
-        port=3306
-    )
+    conn = sqlite3.connect('datos_bd.db')
+    conn.row_factory = sqlite3.Row  # Para acceder a columnas por nombre
+    return conn
 
 @app.route('/')
 def inicio():
@@ -25,8 +30,8 @@ def login():
         username = request.form['username']
         password = request.form['password']
         conexion = get_db()
-        cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
+        cursor = conexion.cursor()
+        cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
         usuario = cursor.fetchone()
         cursor.close()
         conexion.close()
@@ -64,12 +69,11 @@ def docente_dashboard():
     docente_id = session.get('usuario_id')
     conexion = get_db()
     cursor = conexion.cursor()
-    # Busca los grupos donde el docente está asignado
     cursor.execute("""
         SELECT g.id, g.nombre, g.grado
         FROM grupos g
         JOIN grupo_usuario gu ON g.id = gu.grupo_id
-        WHERE gu.user_id = %s
+        WHERE gu.user_id = ?
     """, (docente_id,))
     grupos = cursor.fetchall()
     cursor.close()
@@ -86,7 +90,7 @@ def ver_alumnos_grupo(grupo_id):
         SELECT u.id, u.nombre, u.apellido, u.username
         FROM users u
         JOIN grupo_usuario gu ON u.id = gu.user_id
-        WHERE gu.grupo_id = %s AND u.rol_id = 3
+        WHERE gu.grupo_id = ? AND u.rol_id = 3
     """, (grupo_id,))
     alumnos = cursor.fetchall()
     cursor.close()
@@ -105,20 +109,19 @@ def padre_dashboard():
         return redirect(url_for('login'))
     return render_template('padre_dashboard.html')
 
-@app.route('/admin/nueva_institucion', methods=['GET', 'POST'])
+@app.route('/nueva_institucion', methods=['GET', 'POST'])
 def nueva_institucion():
-    if session.get('rol_id') != 1:
-        return redirect(url_for('login'))
     mensaje = None
     if request.method == 'POST':
         nombre = request.form['nombre']
         conexion = get_db()
         cursor = conexion.cursor()
-        cursor.execute("INSERT INTO instituciones (nombre) VALUES (%s)", (nombre,))
+        cursor.execute("INSERT INTO instituciones (nombre) VALUES (?)", (nombre,))
         conexion.commit()
         cursor.close()
         conexion.close()
-        mensaje = "Institución registrada correctamente."
+        mensaje = "Se registró correctamente"
+        return render_template('nueva_institucion.html', mensaje=mensaje)
     return render_template('nueva_institucion.html', mensaje=mensaje)
 
 @app.route('/admin/nuevo_grupo', methods=['GET', 'POST'])
@@ -134,7 +137,7 @@ def nuevo_grupo():
         nombre = request.form['nombre']
         grado = request.form['grado']
         institucion_id = request.form['institucion_id']
-        cursor.execute("INSERT INTO grupos (nombre, grado, institucion_id) VALUES (%s, %s, %s)", (nombre, grado, institucion_id))
+        cursor.execute("INSERT INTO grupos (nombre, grado, institucion_id) VALUES (?, ?, ?)", (nombre, grado, institucion_id))
         conexion.commit()
         mensaje = "Grupo registrado correctamente."
     cursor.close()
@@ -151,7 +154,7 @@ def nueva_asignatura():
         descripcion = request.form['descripcion']
         conexion = get_db()
         cursor = conexion.cursor()
-        cursor.execute("INSERT INTO asignaturas (nombre, descripcion) VALUES (%s, %s)", (nombre, descripcion))
+        cursor.execute("INSERT INTO asignaturas (nombre, descripcion) VALUES (?, ?)", (nombre, descripcion))
         conexion.commit()
         cursor.close()
         conexion.close()
@@ -167,6 +170,12 @@ def nuevo_usuario():
     cursor = conexion.cursor()
     cursor.execute("SELECT id, nombre FROM roles_user")
     roles = cursor.fetchall()
+    # Obtener la institución del admin
+    admin_id = session.get('usuario_id')
+    cursor.execute("SELECT institucion_id FROM users WHERE id=?", (admin_id,))
+    institucion_id = cursor.fetchone()[0]
+    cursor.execute("SELECT nombre FROM instituciones WHERE id=?", (institucion_id,))
+    institucion_nombre = cursor.fetchone()[0]
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -174,15 +183,16 @@ def nuevo_usuario():
         nombre = request.form['nombre']
         apellido = request.form['apellido']
         rol_id = request.form['rol_id']
+        # Usa la institucion_id del admin
         cursor.execute(
-            "INSERT INTO users (username, password, email, nombre, apellido, rol_id) VALUES (%s, %s, %s, %s, %s, %s)",
-            (username, password, email, nombre, apellido, rol_id)
+            "INSERT INTO users (username, password, email, nombre, apellido, rol_id, institucion_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (username, password, email, nombre, apellido, rol_id, institucion_id)
         )
         conexion.commit()
         mensaje = "Usuario registrado correctamente."
     cursor.close()
     conexion.close()
-    return render_template('nuevo_usuario.html', mensaje=mensaje, roles=roles)
+    return render_template('nuevo_usuario.html', mensaje=mensaje, roles=roles, institucion_nombre=institucion_nombre)
 
 @app.route('/registrarse', methods=['GET', 'POST'])
 def registrarse():
@@ -205,16 +215,22 @@ def registrarse():
         institucion_id = request.form['institucion_id']
         try:
             cursor.execute(
-                "INSERT INTO users (username, password, email, nombre, apellido, rol_id, institucion_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "INSERT INTO users (username, password, email, nombre, apellido, rol_id, institucion_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (username, password, email, nombre, apellido, rol_id, institucion_id)
             )
-            conexion.commit()  # ¡IMPORTANTE!
-            # Busca los nombres para mostrar en el mensaje
-            cursor.execute("SELECT nombre FROM roles_user WHERE id=%s", (rol_id,))
-            rol_nombre = cursor.fetchone()[0]
-            cursor.execute("SELECT nombre FROM instituciones WHERE id=%s", (institucion_id,))
-            institucion_nombre = cursor.fetchone()[0]
-            mensaje = "¡Registro exitoso!"
+            conexion.commit()
+            cursor.close()
+            conexion.close()
+            # Muestra mensaje y redirige después de 2 segundos
+            return render_template(
+                'registrarse.html',
+                mensaje="Registro realizado correctamente. Serás redirigido al login...",
+                roles=roles,
+                instituciones=instituciones,
+                rol_nombre=rol_nombre,
+                institucion_nombre=institucion_nombre,
+                redirigir_login=True
+            )
         except Exception as e:
             mensaje = "Error: " + str(e)
     cursor.close()
@@ -249,7 +265,7 @@ def registrar_asistencias(grupo_id):
         SELECT u.id, u.nombre, u.apellido
         FROM users u
         JOIN grupo_usuario gu ON u.id = gu.user_id
-        WHERE gu.grupo_id = %s AND u.rol_id = 3
+        WHERE gu.grupo_id = ? AND u.rol_id = 3
     """, (grupo_id,))
     alumnos = cursor.fetchall()
     mensaje = None
@@ -258,8 +274,8 @@ def registrar_asistencias(grupo_id):
         for alumno in alumnos:
             presente = request.form.get(f'presente_{alumno[0]}', 'off') == 'on'
             cursor.execute(
-                "INSERT INTO asistencias (estudiante_id, fecha, presente) VALUES (%s, %s, %s)",
-                (alumno[0], fecha, presente)
+                "INSERT INTO asistencias (estudiante_id, fecha, presente) VALUES (?, ?, ?)",
+                (alumno[0], fecha, int(presente))
             )
         conexion.commit()
         mensaje = "Asistencias registradas correctamente."
@@ -278,7 +294,7 @@ def registrar_calificaciones(grupo_id):
         SELECT u.id, u.nombre, u.apellido
         FROM users u
         JOIN grupo_usuario gu ON u.id = gu.user_id
-        WHERE gu.grupo_id = %s AND u.rol_id = 3
+        WHERE gu.grupo_id = ? AND u.rol_id = 3
     """, (grupo_id,))
     alumnos = cursor.fetchall()
     # Obtener asignaturas
@@ -292,7 +308,7 @@ def registrar_calificaciones(grupo_id):
             calificacion = request.form.get(f'calificacion_{alumno[0]}')
             if calificacion:
                 cursor.execute(
-                    "INSERT INTO calificaciones (estudiante_id, asignatura_id, calificacion, fecha) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO calificaciones (estudiante_id, asignatura_id, calificacion, fecha) VALUES (?, ?, ?, ?)",
                     (alumno[0], asignatura_id, calificacion, fecha)
                 )
         conexion.commit()
@@ -313,7 +329,7 @@ def registrar_alertas(grupo_id):
         SELECT u.id, u.nombre, u.apellido
         FROM users u
         JOIN grupo_usuario gu ON u.id = gu.user_id
-        WHERE gu.grupo_id = %s AND u.rol_id = 3
+        WHERE gu.grupo_id = ? AND u.rol_id = 3
     """, (grupo_id,))
     alumnos = cursor.fetchall()
     mensaje = None
@@ -323,7 +339,7 @@ def registrar_alertas(grupo_id):
             alerta = request.form.get(f'alerta_{alumno[0]}')
             if alerta:
                 cursor.execute(
-                    "INSERT INTO alertas (estudiante_id, docente_id, grupo_id, mensaje, fecha) VALUES (%s, %s, %s, %s, %s)",
+                    "INSERT INTO alertas (estudiante_id, docente_id, grupo_id, mensaje, fecha) VALUES (?, ?, ?, ?, ?)",
                     (alumno[0], docente_id, grupo_id, alerta, fecha)
                 )
         conexion.commit()
