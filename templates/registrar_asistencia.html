@@ -1,6 +1,9 @@
-{% extends "base.html" %}
-{% block content %}
-<style>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar asistencias</title>
+    <style>
 .panel-asistencias {
     max-width: 700px;
     margin: 40px auto;
@@ -100,7 +103,9 @@
 .btn-volver:hover {
     background: #223055;
 }
-</style>
+    </style>
+</head>
+<body>
 <div class="panel-asistencias">
     <h2>Registrar asistencias</h2>
     {% if mensaje %}
@@ -129,4 +134,5 @@
     </form>
     <a href="{{ url_for('ver_alumnos_grupo', grupo_id=grupo_id) }}" class="btn-volver">Volver a alumnos</a>
 </div>
-{% endblock %}
+</body>
+</html>

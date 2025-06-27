@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <title>Nuevo Usuario</title>
     <style>
+        body {
+            background: #f4f6fb;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .btn-inicio {
+            display: inline-block;
+            margin: 30px 0 0 30px;
+            background: #8da2c8;
+            color: #223055;
+            padding: 0.7em 1.5em;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 1.2em;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(58,74,107,0.04);
+            transition: background 0.2s, color 0.2s;
+        }
+        .btn-inicio:hover {
+            background: #3a4a6b;
+            color: #fff;
+        }
         .panel-grupo {
             max-width: 500px;
             margin: 40px auto;
@@ -28,7 +49,9 @@
             margin-bottom: 0.3em;
         }
         .panel-grupo input[type="text"],
-        .panel-grupo input[type="number"] {
+        .panel-grupo input[type="number"],
+        .panel-grupo input[type="password"],
+        .panel-grupo input[type="email"] {
             padding: 0.7em;
             border: 1px solid #3a4a6b55;
             border-radius: 5px;
@@ -37,7 +60,9 @@
             transition: border 0.2s;
         }
         .panel-grupo input[type="text"]:focus,
-        .panel-grupo input[type="number"]:focus {
+        .panel-grupo input[type="number"]:focus,
+        .panel-grupo input[type="password"]:focus,
+        .panel-grupo input[type="email"]:focus {
             border: 1.5px solid #3a4a6b;
         }
         .panel-grupo button {
@@ -65,6 +90,7 @@
     </style>
 </head>
 <body>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn-inicio">&#8592; Volver</a>
     <div class="panel-grupo">
         <h2>Registrar Nuevo Usuario</h2>
         {% if mensaje %}
@@ -88,6 +114,7 @@
                     <option value="{{ rol[0] }}">{{ rol[1] }}</option>
                 {% endfor %}
             </select>
+            <label><strong>Institución:</strong> {{ institucion_nombre }}</label>
             <button type="submit">Registrar</button>
         </form>
     </div>

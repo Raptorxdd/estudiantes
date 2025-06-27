@@ -60,7 +60,7 @@
     text-align: center;
     margin-bottom: 1em;
 }
-</style>
+    </style>
 </head>
 <body>
     <div class="panel-asignatura">
@@ -75,6 +75,23 @@
             <input type="text" id="descripcion" name="descripcion">
             <button type="submit">Registrar</button>
         </form>
+        <div style="text-align:center; margin-top: 1.5em;">
+        <a href="{{ url_for('admin_dashboard') }}" style="
+            display: inline-block;
+            background: #8da2c8;
+            color: #223055;
+            padding: 0.7em 1.5em;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 1.1em;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(58,74,107,0.04);
+            transition: background 0.2s, color 0.2s;
+        " onmouseover="this.style.background='#3a4a6b';this.style.color='#fff';"
+          onmouseout="this.style.background='#8da2c8';this.style.color='#223055';">
+            &#8592; Volver 
+        </a>
+    </div>
     </div>
 </body>
 </html>
